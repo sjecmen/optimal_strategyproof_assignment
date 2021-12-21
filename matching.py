@@ -47,33 +47,30 @@ def assign(S, V, k):
     return F
 
 
-def assign_with_partition(S, V1, V2, k):
-    # COI should be just main author, to keep consistency -- should be incorporated in V1/V2
+def assign_with_partition(S, partitions, k):
     m = gp.Model()
     m.setParam('OutputFlag', 0)
     m.setParam('Method', 1)
 
-    assert len(V1) >= len(V2)
-    R1, P1 = zip(*V1)
-    R2, P2 = zip(*V2)
+    reviewer_partition = {r : i for (i, part) in enumerate(partitions) for (r, _) in part}
+    paper_partition = {p : i for (i, part) in enumerate(partitions) for (_, p) in part}
 
     assign_vars = {}
     obj = 0
-    for r, p in itertools.chain(itertools.product(R1, P2), itertools.product(R2, P1)):
-        v = m.addVar(lb=0, ub=1, name=f'{r},{p}')
-        obj += v * S[r, p]
+    for r, p in itertools.product(reviewer_partition, paper_partition):
+        ub = 1
+        if reviewer_partition[r] == paper_partition[p]:
+            ub = 0
+        v = m.addVar(lb=0, ub=ub, name=f'{r},{p}')
+        obj += v * (1 + S[r, p]) # just so that everyone is assigned
         assign_vars[r, p] = v
 
     m.setObjective(obj, GRB.MAXIMIZE)
 
-    for p in P1:
-        m.addConstr(gp.quicksum(assign_vars[r, p] for r in R2) <= k)
-    for p in P2:
-        m.addConstr(gp.quicksum(assign_vars[r, p] for r in R1) <= k)
-    for r in R1:
-        m.addConstr(gp.quicksum(assign_vars[r, p] for p in P2) <= k)
-    for r in R2:
-        m.addConstr(gp.quicksum(assign_vars[r, p] for p in P1) <= k)
+    for p in paper_partition:
+        m.addConstr(gp.quicksum(assign_vars[r, p] for r in reviewer_partition) <= k)
+    for r in reviewer_partition:
+        m.addConstr(gp.quicksum(assign_vars[r, p] for p in paper_partition) <= k)
 
     m.optimize()
 
@@ -84,7 +81,7 @@ def assign_with_partition(S, V1, V2, k):
     F = np.zeros_like(S)
     for idx, v in assign_vars.items():
         F[idx] = v.x
-    assert np.sum(F) == 2 * len(V2)
+    assert np.sum(F) >= len(partitions) * min([len(part) for part in partitions])
     return F
  
 if __name__ == '__main__':

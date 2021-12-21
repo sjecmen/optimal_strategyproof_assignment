@@ -1,6 +1,8 @@
 import numpy as np
 import random
 from copy import copy
+import networkx as nx
+#from equitable_coloring import equitable_color
 
 def random_partition(V):
     V = copy(V)
@@ -8,7 +10,7 @@ def random_partition(V):
     i = int(len(V)/2)
     V2 = V[:i]
     V1 = V[i:]
-    return V1, V2
+    return [V1, V2]
 
 # assignment_list : optimal non-SP assignment
 def k1_partition(V, assignment_list, S):
@@ -59,11 +61,29 @@ def k1_partition(V, assignment_list, S):
             V1 += A
             V2 += B
     assert len(used) == len(V)
-    return V1, V2
+    return [V1, V2]
 
 def k2_partition(V):
     pass
 
-def multi_partition(V):
-    # TODO implement with equitable coloring library
-    pass
+def multi_partition(V, assignment_list, k):
+    graph = nx.DiGraph()
+    for v in V:
+        graph.add_node(v)
+
+    reviewer_map = {v[0] : v for v in V}
+    paper_map = {v[1] : v for v in V}
+    for (r, p) in assignment_list:
+        v0 = reviewer_map[r]
+        v1 = paper_map[p]
+        graph.add_edge(v0, v1)
+
+    ncolor = (2*k) + 1
+    d = nx.coloring.equitable_color(graph, ncolor)
+    partition_map = {}
+    for v, c in d.items():
+        if c in partition_map:
+            partition_map[c].append(v)
+        else:
+            partition_map[c] = [v]
+    return [part for (_, part) in partition_map.items()] 
