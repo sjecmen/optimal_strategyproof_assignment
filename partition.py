@@ -2,7 +2,22 @@ import numpy as np
 import random
 from copy import copy
 import networkx as nx
-#from equitable_coloring import equitable_color
+from collections import defaultdict
+import itertools
+
+def construct_graph(V, assignment_list, S):
+    graph = nx.DiGraph()
+    for v in V:
+        graph.add_node(v)
+
+    reviewer_map = {v[0] : v for v in V}
+    paper_map = {v[1] : v for v in V}
+    for (r, p) in assignment_list:
+        v0 = reviewer_map[r]
+        v1 = paper_map[p]
+        graph.add_edge(v0, v1, weight=S[r, p])
+    return graph
+
 
 def random_partition(V):
     V = copy(V)
@@ -14,38 +29,28 @@ def random_partition(V):
 
 # assignment_list : optimal non-SP assignment
 def k1_partition(V, assignment_list, S):
-    reviewer_map = {v[0] : v for v in V}
-    paper_map = {v[1] : v for v in V}
-    digraph_map = {} # edge if v0 reviews v1
-    weight_map = {} # weight of edge out of v
-    for (r, p) in assignment_list:
-        v0 = reviewer_map[r]
-        v1 = paper_map[p]
-        s = S[r, p]
-        digraph_map[v0] = v1
-        weight_map[v0] = s
+    graph = construct_graph(V, assignment_list, S)
 
-    V = copy(V)
-    random.shuffle(V)
     used = set()
     V1 = []
     V2 = []
-    for v in V:
+    sim_cut = 0
+    for v in graph.nodes:
         if v in used:
             continue
-        used.add(v)
         cycle = [v]
-        edges = [weight_map[v]]
+        weights = []
         while True:
-            v = digraph_map[v]
+            u = v
+            v = next(graph.successors(u))
+            weights.append(graph.get_edge_data(u, v)['weight'])
             if v == cycle[0]:
                 break
-            used.add(v)
             cycle.append(v)
-            s = weight_map[v]
-            edges.append(s)
+        used.update(cycle)
     
-        i = np.argmin(edges)
+        i = np.argmin(weights) # edge from i to i+1
+        sim_cut += sum(weights) - (weights[i] if len(weights) % 2 == 1 else 0)
         reorder_cycle = cycle[i+1:] + cycle[:i+1]
         A = []
         B = []
@@ -60,30 +65,39 @@ def k1_partition(V, assignment_list, S):
         else:
             V1 += A
             V2 += B
+    #print(sim_cut)
     assert len(used) == len(V)
+    assert len(V1) + len(V2) == len(V)
     return [V1, V2]
 
-def k2_partition(V):
-    pass
+def coloring_partition(V, assignment_list, k, S):
+    graph = construct_graph(V, assignment_list, S)
+    ncolor = (2*k) + 2
+    colors = nx.coloring.equitable_color(graph, ncolor) # map v -> color
 
-def multi_partition(V, assignment_list, k):
-    graph = nx.DiGraph()
-    for v in V:
-        graph.add_node(v)
+    maxsim = 0
+    for A in itertools.combinations(range(ncolor), k+1):
+        #print('part', A)
+        sim = 0
+        for (u, v, params) in graph.edges(data=True):
+            if (colors[u] in A) != (colors[v] in A):
+                assert (u[0], v[1]) in assignment_list
+                sim += params['weight']
+        #print(sim)
+        if sim >= maxsim:
+            maxsim = sim
+            maxA = A
+    V1 = [v for v in V if colors[v] in maxA]
+    V2 = [v for v in V if colors[v] not in maxA]
+    assert abs(len(V1) - len(V2)) <= k + 1
+    return [V1, V2]
 
-    reviewer_map = {v[0] : v for v in V}
-    paper_map = {v[1] : v for v in V}
-    for (r, p) in assignment_list:
-        v0 = reviewer_map[r]
-        v1 = paper_map[p]
-        graph.add_edge(v0, v1)
-
+def multi_partition(V, assignment_list, k, S):
+    graph = construct_graph(V, assignment_list, S)
     ncolor = (2*k) + 1
     d = nx.coloring.equitable_color(graph, ncolor)
-    partition_map = {}
+
+    partition_map = defaultdict(list)
     for v, c in d.items():
-        if c in partition_map:
-            partition_map[c].append(v)
-        else:
-            partition_map[c] = [v]
+        partition_map[c].append(v)
     return [part for (_, part) in partition_map.items()] 
