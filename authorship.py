@@ -3,6 +3,9 @@ import gurobipy as gp
 from gurobipy import GRB
 from itertools import product
 
+'''
+Construct an artificial 1-to-1 authorship and save it.
+'''
 
 # Get single-authorship graph
 # just doing max-similarity doesn't get the most matched -- just find a maximum matching unweighted
@@ -41,23 +44,3 @@ def single_authorship_assign(S, M, conflict_only=False):
         F[r, p] = assign_vars[r, p].x
     return F
  
-
-
-
-if __name__ == '__main__':
-    # iclr : 883
-    # preflib3 : 146
-    # DA1 : 400
-    # query : 73
-    dataset = "preflib3"
-    scores = np.load('data/' + dataset + '.npz')
-    S = scores["similarity_matrix"]
-    M = scores["mask_matrix"]
-
-    # TODO also add AAMAS datasets?
-
-    A = single_authorship_assign(S, M)
-    print(np.sum(A), A.shape)
-
-    np.savez('data/' + dataset + '_authorship.npz', single_author_matrix=A)
-

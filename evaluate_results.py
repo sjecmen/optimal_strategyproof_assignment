@@ -6,11 +6,7 @@ import pickle
 import itertools
 
 '''
-Plots :
-    scores in each partition : histograms, overlapping/transparent (/ algorithm*k)
-    decisions in each partition : stacked bar plot ( / k)
-    KS : p and effect size for each algo (/)
-    similarity : similarity for each algo (/)
+Output plots and data.
 '''
 
 
@@ -32,29 +28,12 @@ def get_outcome_counts(partitions, outcome_map):
     workshop_counts = [sum(['Invite to Workshop Track' == outcome_map[p] for (_, p) in partition]) for partition in partitions]
     reject_counts = [sum(['Reject' == outcome_map[p] for (_, p) in partition]) for partition in partitions]
     counts = zip(oral_counts, poster_counts, workshop_counts, reject_counts)
-    #counts = { 'Oral' : oral_counts, 'Poster' : poster_counts, 'Workshop' : workshop_counts, 'Reject' : reject_counts } 
     return counts
 
 
 def get_score_split(partitions, score_map):
     return [[score_map[p] for (_, p) in part if not np.isnan(score_map[p])] for part in partitions]
 
-
-def evaluate_split_fairness(partitions, outcome_map):
-    return
-    counts = get_outcome_counts(partitions, outcome_map)
-    accept_counts = [o + p for (o, p) in zip(counts['Oral'], counts['Poster'])]
-
-    # 333 accepts, 23 orals 
-    total_accepts = sum(accept_counts)
-
-    accepts_per_group = np.mean(accept_counts)
-    sp_accepts = sum([min(accepts_per_group, accepts) for accepts in accept_counts])
-    sp_accepts_missed_frac = 1 - (sp_accepts / total_accepts)
-
-    #sp_accepts_missed_frac = abs(accepts_v1 - accepts_v2) / (2 * total_accepts) # % of true accepts missed by SP assignment
-    #sp_oral = abs(oral_v1 - oral_v2) / (2 * total_oral)
-    return sp_accepts_missed_frac
 
 
 def ks_test(partitions, score_map):
@@ -75,16 +54,29 @@ if __name__ == '__main__':
     with open('data/iclr2018.json', 'r') as f:
         final_json = json.loads(f.read())
     outcome_map, score_map = get_outcomes(final_json, paper_idx)
-    with open('saved/iclr2018_opt.pkl', 'rb') as f:
-        opts = pickle.load(f)
 
+    # load saved results
     all_results = {}
     ks = [1, 2, 3]
     for k in ks:
         with open(f'saved/iclr2018_k{k}.pkl', 'rb') as f:
             all_results[k] = pickle.load(f)
-    alg_labels = {'multi' : 'multi-partition', 'k1' : 'cycle splitting', 'color' : 'coloring', 'random' : 'random'}
+        with open(f'saved/iclr2018_k{k}_fix.pkl', 'rb') as f:
+            all_results[k]['k1'] = pickle.load(f)['k1']
+
+    opts = {}
+    try: # old format
+        with open('saved/iclr2018_opt.pkl', 'rb') as f:
+            opts = pickle.load(f)
+    except:
+        for k in ks:
+            with open(f'saved/iclr2018_opt_k{k}.pkl', 'rb') as f:
+                opts[k] = pickle.load(f)
+
+    alg_labels = {'multi' : 'multi-partition', 'k1' : 'cycle-breaking', 'color' : 'coloring', 'random' : 'random'}
     algo_order = ['random', 'k1', 'color', 'multi']
+    markers = {'random': '_', 'k1' : 'x', 'color' : '2', 'multi' : '.'}
+    colors = {'random': 'black', 'k1' : 'green', 'color' : 'blue', 'multi' : 'red'}
 
     # plot similarities
     sim_data = {}
@@ -99,20 +91,21 @@ if __name__ == '__main__':
                 sim_data[algo]['err'][i] = scipy.stats.sem(sims)
 
     x = ks
-    args = dict(markersize=14, marker='_', linestyle='')
+    args = dict(markersize=16, linestyle='')
+    plt.rcParams.update({'font.size': 18})
     for algo in algo_order:
         data = sim_data[algo]
         if all([e == None for e in data['err']]):
             data['err'] = None
         print(algo, data['mean'])
-        plt.errorbar(x, data['mean'], yerr=data['err'], label=alg_labels[algo], **args)
+        plt.errorbar(x, data['mean'], yerr=data['err'], label=alg_labels[algo], color=colors[algo], marker=markers[algo], **args)
     plt.legend()
-    #plt.tight_layout()
+    plt.tight_layout()
     plt.ylim(bottom=-0.05, top=1.05)
     plt.xticks(ticks=x)
     plt.xlabel('k')
-    plt.ylabel('Fraction of optimal non-SP similarity, ICLR')
-    plt.savefig('similarity_iclr.png')
+    plt.ylabel('Fraction of optimal similarity')
+    plt.savefig('plots/similarity_iclr.pdf', bbox_inches="tight")
     #plt.show()
     plt.close()
 
@@ -124,50 +117,22 @@ if __name__ == '__main__':
             p, D = (np.mean(x) for x in zip(*ks_results))
             print(f'{k}\t{algo}\t{p:.4f}\t{D:.4f}')
 
-    '''
-    ks_data = {}
-    for k, k_results in all_results.items():
-        for algo, algo_results in k_results.items():
-            ks_results = [ks_test(partition, score_map)  for (partition, _) in algo_results]
-            ps, Ds = zip(*ks_results)
-
-            if algo not in ks_data:
-                ks_data[algo] = {'mean' : [None]*len(ks)*2, 'err' : [None]*len(ks)*2}
-            i = ks.index(k)
-            ks_data[algo]['mean'][2*i] = np.mean(ps)
-            ks_data[algo]['mean'][2*i + 1] = np.mean(Ds)
-            if len(ps) > 1:
-                ks_data[algo]['err'][2*i] = scipy.stats.sem(ps)
-                ks_data[algo]['err'][2*i + 1] = scipy.stats.sem(Ds)
-
-    x = [k+delt for k in ks for delt in [-0.2, 0.2]]
-    args = dict(markersize=14, marker='_', linestyle='')
-    for algo, data in ks_data.items():
-        if all([e == None for e in data['err']]):
-            data['err'] = None
-        plt.errorbar(x, data['mean'], yerr=data['err'], label=alg_labels[algo], **args)
-    plt.legend()
-    #plt.tight_layout()
-    plt.ylim(bottom=-0.05, top=1.05)
-    plt.xticks(ticks=x, labels=[s for k in ks for s in [f'k={k}, p', f'k={k}, D']])
-    plt.ylabel('K-S test p and D')
-    plt.savefig('ks.png')
-    #plt.show()
-    plt.close()
-    '''
-
     # plot scores in each partition 
     for k, k_results in all_results.items():
         for algo, algo_results in k_results.items():
             if algo == 'random':
                 continue
+            if algo == 'multi' and k > 1:
+                continue
             partition = algo_results[0][0]
             score_partition = get_score_split(partition, score_map)
-            for part in score_partition:
-                plt.hist(part, bins=20, alpha=0.5)
-            plt.xlabel('Score')
-            plt.title(f'Scores by partition: {alg_labels[algo]}, k={k}')
-            plt.savefig(f'scores_{algo}_k{k}.png')
+            colors = ['red', 'blue', 'yellow']
+            for i, part in enumerate(score_partition):
+                plt.hist(part, bins=20, range=(min(score_map.values()), max(score_map.values())), alpha=0.5, histtype='stepfilled', edgecolor='black', facecolor=colors[i])
+            plt.tight_layout()
+            plt.xlabel('Mean review score')
+            plt.ylabel('Frequency in subset')
+            plt.savefig(f'plots/scores_{algo}_k{k}.pdf', bbox_inches="tight")
             #plt.show()
             plt.close()
 
@@ -182,6 +147,10 @@ if __name__ == '__main__':
         for algo in algo_order:
             if algo == 'random':
                 continue
+            if algo == 'multi' and k == 1:
+                plt.rcParams.update({'font.size': 15})
+            else:
+                plt.rcParams.update({'font.size': 18})
             algo_results = k_results[algo]
             partition = algo_results[0][0]
             outcome_counts = get_outcome_counts(partition, outcome_map)
@@ -194,15 +163,122 @@ if __name__ == '__main__':
             labs.append(alg_labels[algo])
             i += 1
         o, p, w, r = (np.array(v) for v in zip(*vals))
-        plt.bar(x, o, widths, label='Oral')
-        plt.bar(x, p, widths, bottom=o, label='Poster')
-        plt.bar(x, w, widths, bottom=p+o, label='Workshop')
-        plt.bar(x, r, widths, bottom=w+p+o, label='Reject')
+        widths = np.array(widths) - 0.02
+        args = dict(edgecolor='black')
+        plt.bar(x, o, widths, label='Oral', hatch='', **args)
+        plt.bar(x, p, widths, bottom=o, label='Poster', hatch='/', **args)
+        plt.bar(x, w, widths, bottom=p+o, label='Workshop', hatch='|', **args)
+        plt.bar(x, r, widths, bottom=w+p+o, label='Reject', hatch='\\', **args)
 
+        plt.tight_layout()
         plt.legend()
         plt.xticks(ticks=base, labels=labs)
-        plt.title(f'Outcomes by partition: k={k}')
-        plt.savefig(f'outcomes_k{k}.png')
+        plt.ylabel('Frequency in subset')
+        plt.savefig(f'plots/outcomes_k{k}.pdf', bbox_inches="tight")
         #plt.show()
         plt.close()
 
+
+    ##########
+    # General authorship
+    ##########
+    # TODO remove repetition
+
+    # load saved results
+    with open(f'saved/iclr2018_gen_rl6pl3.pkl', 'rb') as f:
+        results = pickle.load(f)
+    with open(f'saved/iclr2018_opt_gen_rl6pl3.pkl', 'rb') as f:
+        opt = pickle.load(f)
+
+    
+    alg_labels = {'heuristic':'heuristic', 'random' : 'random'}
+    algo_order = ['random', 'heuristic']
+    markers = {'random': '_', 'heuristic' : 'x'}
+    colors = {'random': 'black', 'heuristic' : 'green'}
+
+
+    # find imbalances
+    def imbalance(Xs):
+        return abs(len(Xs[0]) - len(Xs[1])) #/ (len(Xs[0]) + len(Xs[1]))
+    Rs, Ps, _ = results['heuristic'][0]
+    print('Heuristic imbalance:', imbalance(Rs), imbalance(Ps))
+    print([len(R) for R in Rs], [len(P) for P in Ps])
+    r_imbs = []
+    p_imbs = []
+    for (Rs, Ps, _) in results['random']:
+        r_imbs.append(imbalance(Rs))
+        p_imbs.append(imbalance(Ps))
+    print('Random imbalance:', np.mean(r_imbs), np.mean(p_imbs))
+
+
+    # plot similarities
+    sim_data = {}
+    for algo, algo_results in results.items():
+        sims = [s / opt for (_, _, s) in algo_results]
+        sim_data[algo] = {}
+        sim_data[algo]['mean'] = np.mean(sims)
+        if len(sims) > 1:
+            sim_data[algo]['err'] = scipy.stats.sem(sims)
+        else:
+            sim_data[algo]['err'] = None
+    print(sim_data)
+
+    '''
+    args = dict(markersize=16, linestyle='')
+    plt.rcParams.update({'font.size': 18})
+    for algo in algo_order:
+        data = sim_data[algo]
+        print(algo, data['mean'])
+        plt.errorbar(0, data['mean'], yerr=data['err'], label=alg_labels[algo], color=colors[algo], marker=markers[algo], **args)
+    plt.legend()
+    plt.tight_layout()
+    plt.ylim(bottom=-0.05, top=1.05)
+    plt.ylabel('Fraction of optimal similarity')
+    plt.savefig('plots/similarity_iclr_gen.pdf',bbox_inches="tight" )
+    plt.show()
+    plt.close()
+    '''
+
+    # plot scores in each partition 
+    partition = [[(p, p) for p in P] for P in results['heuristic'][0][1]]
+    score_partition = get_score_split(partition, score_map)
+    colors = ['red', 'blue']
+    for i, part in enumerate(score_partition):
+        plt.hist(part, bins=20, range=(min(score_map.values()), max(score_map.values())), alpha=0.5, histtype='stepfilled', edgecolor='black', facecolor=colors[i])
+    #plt.tight_layout()
+    plt.xlabel('Mean review score')
+    plt.ylabel('Frequency in subset')
+    plt.savefig(f'plots/scores_gen.pdf', bbox_inches="tight")
+    plt.show()
+    plt.close()
+
+    # plot decisions in each partition 
+    x = []
+    vals = []
+    widths = []
+    plt.rcParams.update({'font.size': 16})
+    outcome_counts = get_outcome_counts(partition, outcome_map)
+    width = 0.8 / len(partition)
+    for j, v in enumerate(outcome_counts):
+        pos = (j * width) - ((width * (len(partition) - 1)) / 2)
+        x.append(pos)
+        widths.append(width)
+        vals.append(v)
+    o, p, w, r = (np.array(v) for v in zip(*vals))
+    widths = np.array(widths) - 0.02
+    args = dict(edgecolor='black')
+    plt.bar(x, o, widths, label='Oral', hatch='', **args)
+    plt.bar(x, p, widths, bottom=o, label='Poster', hatch='/', **args)
+    plt.bar(x, w, widths, bottom=p+o, label='Workshop', hatch='|', **args)
+    plt.bar(x, r, widths, bottom=w+p+o, label='Reject', hatch='\\', **args)
+    #plt.tight_layout()
+    plt.legend()
+    plt.xticks(ticks=[0], labels=[alg_labels['heuristic']])
+    #plt.xticks(ticks=[], labels=[])
+    plt.xlim(left=-.5, right=1.5)
+    plt.ylabel('Frequency in subset')
+    plt.savefig(f'plots/outcomes_gen.pdf', bbox_inches="tight")
+    plt.show()
+    plt.close()
+
+  

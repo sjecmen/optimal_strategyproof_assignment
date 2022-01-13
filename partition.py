@@ -5,6 +5,10 @@ import networkx as nx
 from collections import defaultdict
 import itertools
 
+'''
+Partitioning algorithms for the 1-to-1 authorship case.
+'''
+
 def construct_graph(V, assignment_list, S):
     graph = nx.DiGraph()
     for v in V:
@@ -28,14 +32,18 @@ def random_partition(V):
     return [V1, V2]
 
 # assignment_list : optimal non-SP assignment
-def k1_partition(V, assignment_list, S):
+def k1_partition(V, assignment_list, S, size_map={}):
     graph = construct_graph(V, assignment_list, S)
+
+    # size functionality for the general authorship algo
+    def size(l):
+        return sum([size_map.get(v, 1) for v in l])
 
     used = set()
     V1 = []
     V2 = []
-    sim_cut = 0
-    for v in graph.nodes:
+    node_order = reversed(sorted(V, key=lambda x: size_map.get(x, 1)))
+    for v in node_order:
         if v in used:
             continue
         cycle = [v]
@@ -50,7 +58,6 @@ def k1_partition(V, assignment_list, S):
         used.update(cycle)
     
         i = np.argmin(weights) # edge from i to i+1
-        sim_cut += sum(weights) - (weights[i] if len(weights) % 2 == 1 else 0)
         reorder_cycle = cycle[i+1:] + cycle[:i+1]
         A = []
         B = []
@@ -59,15 +66,20 @@ def k1_partition(V, assignment_list, S):
                 A.append(v)
             else:
                 B.append(v)
-        if len(V1) <= len(V2):
+        if size(B) > size(A): # make sure A is larger
+            temp = A
+            A = B
+            B = temp
+        if size(V1) <= size(V2):
             V1 += A
             V2 += B
         else:
-            V1 += A
-            V2 += B
-    #print(sim_cut)
+            V1 += B
+            V2 += A
     assert len(used) == len(V)
     assert len(V1) + len(V2) == len(V)
+    if size_map == {}:
+        assert abs(len(V1) - len(V2)) <= 1
     return [V1, V2]
 
 def coloring_partition(V, assignment_list, k, S):
@@ -77,13 +89,11 @@ def coloring_partition(V, assignment_list, k, S):
 
     maxsim = 0
     for A in itertools.combinations(range(ncolor), k+1):
-        #print('part', A)
         sim = 0
         for (u, v, params) in graph.edges(data=True):
             if (colors[u] in A) != (colors[v] in A):
                 assert (u[0], v[1]) in assignment_list
                 sim += params['weight']
-        #print(sim)
         if sim >= maxsim:
             maxsim = sim
             maxA = A

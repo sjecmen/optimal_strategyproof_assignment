@@ -4,6 +4,10 @@ from gurobipy import GRB
 import itertools
 import json
 
+'''
+Various functions for finding assignments.
+'''
+
 def matrix_to_list(M):
     return [tuple(c) for c in np.argwhere(M)]
 
@@ -37,13 +41,8 @@ def assign(S, V, k):
         raise RuntimeError('unsolved')
 
     F = np.zeros_like(S)
-    #assignment_list = []
     for idx, v in assign_vars.items():
         F[idx] = v.x
-        #if v.x == 1:
-        #    assignment_list.append(idx)
-        #else:
-        #    assert v.x == 0
     return F
 
 
@@ -62,7 +61,7 @@ def assign_with_partition(S, partitions, k):
         if reviewer_partition[r] == paper_partition[p]:
             ub = 0
         v = m.addVar(lb=0, ub=ub, name=f'{r},{p}')
-        obj += v * (1 + S[r, p]) # just so that everyone is assigned
+        obj += v * S[r, p]
         assign_vars[r, p] = v
 
     m.setObjective(obj, GRB.MAXIMIZE)
@@ -83,16 +82,77 @@ def assign_with_partition(S, partitions, k):
         F[idx] = v.x
     assert np.sum(F) >= len(partitions) * min([len(part) for part in partitions])
     return F
- 
-if __name__ == '__main__':
-    dataset = "DA1"
-    scores = np.load('data/' + dataset + '.npz')
-    S = scores["similarity_matrix"]
-    M = scores["mask_matrix"]
-    data = np.load('data/' + dataset + '_authorship.npz')
-    author_matrix = data['single_author_matrix']
-    V = matrix_to_list(author_matrix)
 
-    assignment_matrix = assign(S, V, 1)
-    np.savez('data/' + dataset + '_assignment.npz', assignment_matrix_k1=assignment_matrix)
+
+# assign with arbitrary authorship
+def full_assign(S, COI, revload, papload):
+    m = gp.Model()
+    m.setParam('OutputFlag', 0)
+    m.setParam('Method', 1)
+
+    R = range(S.shape[0])
+    P = range(S.shape[1])
+
+    assign_vars = {}
+    obj = 0
+    for r, p in itertools.product(R, P):
+        v = m.addVar(lb=0, ub=1-COI[r, p], name=f'{r},{p}')
+        obj += v * S[r, p]
+        assign_vars[r, p] = v
+
+    m.setObjective(obj, GRB.MAXIMIZE)
+
+    for p in P:
+        m.addConstr(gp.quicksum(assign_vars[r, p] for r in R) == papload)
+    for r in R:
+        m.addConstr(gp.quicksum(assign_vars[r, p] for p in P) <= revload)
+
+    m.optimize()
+
+    if m.status != GRB.OPTIMAL:
+        print("Model not solved")
+        raise RuntimeError('unsolved')
+
+    F = np.zeros_like(S)
+    for idx, v in assign_vars.items():
+        F[idx] = v.x
+    return F
+
+
+# =papload, <=revload
+def full_assign_with_partition(S, reviewer_partitions_list, paper_partitions_list, revload, papload):
+    m = gp.Model()
+    m.setParam('OutputFlag', 0)
+    m.setParam('Method', 1)
+
+    reviewer_partition = {r : i for (i, part) in enumerate(reviewer_partitions_list) for r in part}
+    paper_partition = {p : i for (i, part) in enumerate(paper_partitions_list) for p in part}
+
+    assign_vars = {}
+    obj = 0
+    for r, p in itertools.product(reviewer_partition, paper_partition):
+        ub = 1
+        if reviewer_partition[r] == paper_partition[p]:
+            ub = 0
+        v = m.addVar(lb=0, ub=ub, name=f'{r},{p}')
+        obj += v * S[r, p]
+        assign_vars[r, p] = v
+
+    m.setObjective(obj, GRB.MAXIMIZE)
+
+    for p in paper_partition:
+        m.addConstr(gp.quicksum(assign_vars[r, p] for r in reviewer_partition) == papload)
+    for r in reviewer_partition:
+        m.addConstr(gp.quicksum(assign_vars[r, p] for p in paper_partition) <= revload)
+
+    m.optimize()
+
+    if m.status != GRB.OPTIMAL:
+        print("Model not solved")
+        raise RuntimeError('unsolved')
+
+    F = np.zeros_like(S)
+    for idx, v in assign_vars.items():
+        F[idx] = v.x
+    return F
 
