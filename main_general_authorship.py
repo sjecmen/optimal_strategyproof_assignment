@@ -8,6 +8,12 @@ import itertools
 import random
 import time
 
+
+'''
+Runs the algorithm (for general-authorship) and saves the similarity and partitions.
+'''
+
+
 def get_connected_components(COI):
     nrev = COI.shape[0]
     npap = COI.shape[1]
@@ -41,7 +47,6 @@ def random_general_partition(S, COI):
     comp_map, rev_comps, pap_comps = get_connected_components(COI)
     ncomp = len(comp_map)
 
-    # for each comp, random split partition
     A = random.sample(range(ncomp), int(ncomp / 2))
     B = [x for x in range(ncomp) if x not in A]
 
@@ -55,11 +60,9 @@ def heuristic_partition(S, COI, A_opt):
     nrev = COI.shape[0]
     npap = COI.shape[1]
 
-    # find connected components
     comp_map, rev_comps, pap_comps = get_connected_components(COI)
     ncomp = len(comp_map)
 
-    # have to find optimal k=1 algo on comps
     S_comp = np.zeros((ncomp, ncomp))
     for r, p in itertools.product(range(nrev), range(npap)):
         if A_opt[r, p]:
@@ -68,7 +71,6 @@ def heuristic_partition(S, COI, A_opt):
             S_comp[rc, pc] += S[r, p]
             S_comp[pc, rc] += S[r, p]
 
-    # use k=1 algo (modified cycle placement)
     V_comp = [(i, i) for i in range(ncomp)]
     A_comp_opt = assign(S_comp, V_comp, 1)
     A_list_comp = matrix_to_list(A_comp_opt)
@@ -89,12 +91,7 @@ if __name__ == '__main__':
     papload = 3
     
     
-    tfname = f'temp/gen_opt_{revload}_{papload}.npy' # TODO remove
-    try:
-        A_opt = np.load(tfname)
-    except FileNotFoundError:
-        A_opt = full_assign(S, COI, revload, papload)
-        np.save(tfname, A_opt)
+    A_opt = full_assign(S, COI, revload, papload)
     s_opt = np.sum(A_opt * S)
     with open(f'saved/{dataset}_opt_gen_rl{revload}pl{papload}.pkl', 'wb') as f:
         pickle.dump(s_opt, f)
@@ -132,4 +129,4 @@ if __name__ == '__main__':
         fname = f'saved/{dataset}_gen_rl{revload}pl{papload}_{ts}.pkl'
         with open(fname, 'wb') as f:
             pickle.dump(results, f)
-    print('nfail', failed)
+    print('num failures', failed)

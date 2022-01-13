@@ -7,6 +7,8 @@ import itertools
 
 '''
 Partitioning algorithms for the 1-to-1 authorship case.
+V : list (rev idx, pap idx) for authored pairs
+assignment_list : all (rev idx, pap idx) pairs assigned by optimal non-SP assignment
 '''
 
 def construct_graph(V, assignment_list, S):
@@ -31,7 +33,6 @@ def random_partition(V):
     V1 = V[i:]
     return [V1, V2]
 
-# assignment_list : optimal non-SP assignment
 def k1_partition(V, assignment_list, S, size_map={}):
     graph = construct_graph(V, assignment_list, S)
 

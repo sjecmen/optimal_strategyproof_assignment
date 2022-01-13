@@ -11,6 +11,8 @@ Various functions for finding assignments.
 def matrix_to_list(M):
     return [tuple(c) for c in np.argwhere(M)]
 
+# One-to-one authorship
+# V : list of (rev idx, pap idx) authored pairs
 def assign(S, V, k):
     m = gp.Model()
     m.setParam('OutputFlag', 0)
@@ -30,7 +32,7 @@ def assign(S, V, k):
     for (r, p) in V:
         m.addConstr(assign_vars[r, p] == 0)
     for p in P:
-        m.addConstr(gp.quicksum(assign_vars[r, p] for r in R) == k) # perfect k-matching only atm
+        m.addConstr(gp.quicksum(assign_vars[r, p] for r in R) == k)
     for r in R:
         m.addConstr(gp.quicksum(assign_vars[r, p] for p in P) == k)
 
@@ -45,7 +47,7 @@ def assign(S, V, k):
         F[idx] = v.x
     return F
 
-
+# partitions : list of subsets, each of which is a list of (rev idx, pap idx) authored pairs
 def assign_with_partition(S, partitions, k):
     m = gp.Model()
     m.setParam('OutputFlag', 0)
@@ -84,7 +86,7 @@ def assign_with_partition(S, partitions, k):
     return F
 
 
-# assign with arbitrary authorship
+# Assignment with arbitrary authorship
 def full_assign(S, COI, revload, papload):
     m = gp.Model()
     m.setParam('OutputFlag', 0)
@@ -119,7 +121,6 @@ def full_assign(S, COI, revload, papload):
     return F
 
 
-# =papload, <=revload
 def full_assign_with_partition(S, reviewer_partitions_list, paper_partitions_list, revload, papload):
     m = gp.Model()
     m.setParam('OutputFlag', 0)

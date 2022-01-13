@@ -6,7 +6,7 @@ import pickle
 import time
 
 '''
-Runs the main algorithms (for single-authorship) and saves the similarity and partitions.
+Runs the main algorithms (for 1-to-1-authorship) and saves the similarity and partitions.
 '''
 
 # Parameters

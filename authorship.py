@@ -4,12 +4,9 @@ from gurobipy import GRB
 from itertools import product
 
 '''
-Construct an artificial 1-to-1 authorship and save it.
+Construct an artificial 1-to-1 authorship by finding maximum matching within conflicts (if conflict_only) 
+or a max-similarity matching (otherwise).
 '''
-
-# Get single-authorship graph
-# just doing max-similarity doesn't get the most matched -- just find a maximum matching unweighted
-# if missing COI data, just do max-similarity over all
 def single_authorship_assign(S, M, conflict_only=False):
     m = gp.Model()
     m.setParam('OutputFlag', 0)
