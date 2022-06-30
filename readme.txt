@@ -1,4 +1,4 @@
-Implements algorithms for strategyproof assignment via partitioning. Requires Gurobi for LP solving.
+Implements algorithms for strategyproof assignment via partitioning. See the corresponding full paper here: https://arxiv.org/abs/2201.10631. Requires Gurobi for LP solving.
 
 - main.py : runs the main algorithms for one-to-one authorship
 - main_general_authorship.py : runs the algorithm for general authorship
