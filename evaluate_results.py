@@ -107,7 +107,7 @@ if __name__ == '__main__':
     plt.xlabel('k')
     plt.ylabel('Fraction of optimal similarity lost')
     plt.savefig('plots/similarity_iclr.pdf', bbox_inches="tight")
-    plt.show()
+    #plt.show()
     plt.close()
 
     # KS table
@@ -139,7 +139,7 @@ if __name__ == '__main__':
 
     # plot decisions in each partition 
     for k, k_results in all_results.items():
-        base = np.arange(len(k_results))
+        base = np.arange(len(k_results) - 1)
         i = 0
         x = []
         vals = []
@@ -199,7 +199,7 @@ if __name__ == '__main__':
 
     # find imbalances
     def imbalance(Xs):
-        return abs(len(Xs[0]) - len(Xs[1])) #/ (len(Xs[0]) + len(Xs[1]))
+        return abs(len(Xs[0]) - len(Xs[1]))
     Rs, Ps, _ = results['heuristic'][0]
     print('Heuristic imbalance:', imbalance(Rs), imbalance(Ps))
     print([len(R) for R in Rs], [len(P) for P in Ps])
@@ -224,7 +224,7 @@ if __name__ == '__main__':
     print(sim_data)
 
     args = dict(markersize=16, linestyle='')
-    size = plt.rcParamsDefault["figure.figsize"]
+    size = plt.rcParamsDefault["figure.figsize"].copy()
     size[0] = 3.5
     plt.rcParams.update({'font.size': 18, 'figure.figsize' : size})
     for algo in algo_order:
@@ -240,7 +240,7 @@ if __name__ == '__main__':
     #plt.show()
     plt.close()
 
-    plt.rcParams["figure.figsize"] = plt.rcParamsDefault["figure.figsize"]
+    plt.rcParams.update({"figure.figsize" : plt.rcParamsDefault["figure.figsize"]})
 
     # plot scores in each partition 
     partition = [[(p, p) for p in P] for P in results['heuristic'][0][1]]
@@ -276,7 +276,6 @@ if __name__ == '__main__':
     plt.tight_layout()
     plt.legend()
     plt.xticks(ticks=[0], labels=[alg_labels['heuristic']])
-    #plt.xticks(ticks=[], labels=[])
     plt.xlim(left=-.5, right=1.5)
     plt.ylabel('Relative frequency in subset')
     plt.savefig(f'plots/outcomes_gen.pdf', bbox_inches="tight")

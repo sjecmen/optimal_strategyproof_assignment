@@ -74,7 +74,7 @@ def heuristic_partition(S, COI, A_opt):
     V_comp = [(i, i) for i in range(ncomp)]
     A_comp_opt = assign(S_comp, V_comp, 1)
     A_list_comp = matrix_to_list(A_comp_opt)
-    sizes = {v : len(comp_map[v[0]]) for v in V_comp}
+    sizes = {v : len([p for p in comp_map[v[0]] if p >= nrev]) for v in V_comp}
     partition_comp = k1_partition(V_comp, A_list_comp, S_comp, sizes)
 
     reviewer_partition = [[x for (i, _) in part for x in comp_map[i] if x < nrev] for part in partition_comp ]
@@ -101,13 +101,14 @@ if __name__ == '__main__':
     ts = time.strftime('%m%d%H%M')
     failed = 0
     for method in methods:
-        print(method)
         T = 1
         if method == 'random':
             T = 100
         for i in range(T):
+            print(method, i)
             if method == 'heuristic':
                 Rs, Ps = heuristic_partition(S, COI, A_opt)
+                print('Size of partitions:', [len(R) for R in Rs], [len(P) for P in Ps])
             elif method == 'random':
                 Rs, Ps = random_general_partition(S, COI)
             else:
@@ -118,7 +119,7 @@ if __name__ == '__main__':
             except RuntimeError: # if partition is too imbalanced
                 i -= 1
                 failed += 1
-                print('failed')
+                print('Assignment failed')
                 continue
             assert np.all(A <= 1-COI)
             s = np.sum(A * S)
@@ -129,4 +130,5 @@ if __name__ == '__main__':
         fname = f'saved/{dataset}_gen_rl{revload}pl{papload}_{ts}.pkl'
         with open(fname, 'wb') as f:
             pickle.dump(results, f)
-    print('num failures', failed)
+    if failed > 0:
+        print('Number of failures:', failed)
