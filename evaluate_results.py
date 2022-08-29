@@ -20,7 +20,6 @@ def get_outcomes(final_json, paper_idx):
             score_map[idx] = float(elt['rating']) if elt['rating'] != ' N/A' else np.nan
     return outcome_map, score_map
 
-
 def get_outcome_counts(partitions, outcome_map):
     oral_counts = [sum(['Accept (Oral)' == outcome_map[p] for (_, p) in partition]) for partition in partitions]
     poster_counts = [sum(['Accept (Poster)' == outcome_map[p] for (_, p) in partition]) for partition in partitions]
@@ -29,11 +28,8 @@ def get_outcome_counts(partitions, outcome_map):
     counts = list(zip(oral_counts, poster_counts, workshop_counts, reject_counts))
     return counts
 
-
 def get_score_split(partitions, score_map):
     return [[score_map[p] for (_, p) in part if not np.isnan(score_map[p])] for part in partitions]
-
-
 
 def ks_test(partitions, score_map):
     scores = [[score_map[p] for (_, p) in part] for part in partitions]
@@ -46,7 +42,6 @@ def ks_test(partitions, score_map):
         ps.append(p)
         Ds.append(D)
     return min(ps), max(Ds)
-
 
 
 if __name__ == '__main__':
@@ -191,24 +186,27 @@ if __name__ == '__main__':
         opt = pickle.load(f)
 
     
-    alg_labels = {'heuristic':'heuristic', 'random' : 'random'}
-    algo_order = ['random', 'heuristic']
-    markers = {'random': '_', 'heuristic' : 'x'}
-    colors = {'random': 'black', 'heuristic' : 'green'}
+    alg_labels = {'heuristic':'heuristic', 'random' : 'random', 'heuristic_maxdegree3' : 'heuristic,\nreviewers removed'}
+    algo_order = ['random', 'heuristic', 'heuristic_maxdegree3' ]
+    markers = {'random': '_', 'heuristic' : 'x', 'heuristic_maxdegree3' : '2'}
+    colors = {'random': 'black', 'heuristic' : 'green', 'heuristic_maxdegree3' : 'blue'}
 
 
     # find imbalances
     def imbalance(Xs):
         return abs(len(Xs[0]) - len(Xs[1]))
-    Rs, Ps, _ = results['heuristic'][0]
-    print('Heuristic imbalance:', imbalance(Rs), imbalance(Ps))
-    print([len(R) for R in Rs], [len(P) for P in Ps])
-    r_imbs = []
-    p_imbs = []
-    for (Rs, Ps, _) in results['random']:
-        r_imbs.append(imbalance(Rs))
-        p_imbs.append(imbalance(Ps))
-    print('Random imbalance:', np.mean(r_imbs), np.mean(p_imbs))
+    for algo, algo_results in results.items():
+        if algo != 'random':
+            Rs, Ps, _ = results[algo][0]
+            print(f'{algo} imbalance:', imbalance(Rs), imbalance(Ps))
+            print([len(R) for R in Rs], [len(P) for P in Ps])
+        else:
+            r_imbs = []
+            p_imbs = []
+            for (Rs, Ps, _) in results['random']:
+                r_imbs.append(imbalance(Rs))
+                p_imbs.append(imbalance(Ps))
+            print('Random imbalance:', np.mean(r_imbs), np.mean(p_imbs))
 
 
     # plot similarities
@@ -225,13 +223,13 @@ if __name__ == '__main__':
 
     args = dict(markersize=16, linestyle='')
     size = plt.rcParamsDefault["figure.figsize"].copy()
-    size[0] = 3.5
+    size[0] = 5
     plt.rcParams.update({'font.size': 18, 'figure.figsize' : size})
     for algo in algo_order:
         data = sim_data[algo]
-        print(algo, data['mean'])
+        print(algo, 1-data['mean'])
         plt.errorbar(0, 1 - np.array(data['mean']), yerr=data['err'], label=alg_labels[algo], color=colors[algo], marker=markers[algo], **args)
-    plt.legend()
+    plt.legend(loc='upper right')
     plt.tight_layout()
     plt.xticks(ticks=[0], labels=[])
     plt.ylim(bottom=0, top=0.4)
@@ -243,7 +241,7 @@ if __name__ == '__main__':
     plt.rcParams.update({"figure.figsize" : plt.rcParamsDefault["figure.figsize"]})
 
     # plot scores in each partition 
-    partition = [[(p, p) for p in P] for P in results['heuristic'][0][1]]
+    partition = [[(p, p) for p in P] for P in results['heuristic_maxdegree3'][0][1]]
     score_partition = get_score_split(partition, score_map)
     colors = ['red', 'blue']
     for i, part in enumerate(score_partition):
@@ -256,17 +254,28 @@ if __name__ == '__main__':
     plt.close()
 
     # plot decisions in each partition 
+    i = 0
     x = []
     widths = []
+    labs = []
+    vals = []
+    sizes = []
     plt.rcParams.update({'font.size': 16})
-    outcome_counts = get_outcome_counts(partition, outcome_map)
-    width = 0.8 / len(partition)
-    for j in range(len(outcome_counts)):
-        pos = (j * width) - ((width * (len(partition) - 1)) / 2)
-        x.append(pos)
-        widths.append(width)
-    sizes = [len(part) for part in partition]
-    o, p, w, r = (np.array(v) / np.array(sizes) for v in zip(*outcome_counts))
+    for algo in algo_order:
+        if algo == 'random':
+            continue
+        partition = [[(p, p) for p in P] for P in results[algo][0][1]]
+        outcome_counts = get_outcome_counts(partition, outcome_map)
+        width = 0.8 / len(partition)
+        for j, v in enumerate(outcome_counts):
+            pos = i + (j * width) - ((width * (len(partition) - 1)) / 2)
+            x.append(pos)
+            widths.append(width)
+            vals.append(v)
+            sizes.append(len(partition[j]))
+        i += 1
+        labs.append(alg_labels[algo])
+    o, p, w, r = (np.array(v) / np.array(sizes) for v in zip(*vals))
     widths = np.array(widths) - 0.02
     args = dict(edgecolor='black')
     plt.bar(x, o, widths, label='Oral', hatch='', **args)
@@ -275,8 +284,8 @@ if __name__ == '__main__':
     plt.bar(x, r, widths, bottom=w+p+o, label='Reject', hatch='\\', **args)
     plt.tight_layout()
     plt.legend()
-    plt.xticks(ticks=[0], labels=[alg_labels['heuristic']])
-    plt.xlim(left=-.5, right=1.5)
+    plt.xticks(ticks=[0, 1], labels=labs)
+    plt.xlim(left=-.5, right=2.5)
     plt.ylabel('Relative frequency in subset')
     plt.savefig(f'plots/outcomes_gen.pdf', bbox_inches="tight")
     #plt.show()

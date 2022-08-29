@@ -121,30 +121,36 @@ def full_assign(S, COI, revload, papload):
     return F
 
 
-def full_assign_with_partition(S, reviewer_partitions_list, paper_partitions_list, revload, papload):
+def full_assign_with_partition(S, COI, reviewer_partitions_list, paper_partitions_list, revload, papload):
     m = gp.Model()
     m.setParam('OutputFlag', 0)
     m.setParam('Method', 1)
+
+    R = range(S.shape[0])
+    P = range(S.shape[1])
+    author_mask = np.sum(COI, axis=1) > 0
 
     reviewer_partition = {r : i for (i, part) in enumerate(reviewer_partitions_list) for r in part}
     paper_partition = {p : i for (i, part) in enumerate(paper_partitions_list) for p in part}
 
     assign_vars = {}
     obj = 0
-    for r, p in itertools.product(reviewer_partition, paper_partition):
+    for r, p in itertools.product(R, P):
         ub = 1
-        if reviewer_partition[r] == paper_partition[p]:
+        if reviewer_partition[r] == paper_partition[p] and author_mask[r]:
             ub = 0
+        else:
+            assert COI[r, p] == 0
         v = m.addVar(lb=0, ub=ub, name=f'{r},{p}')
         obj += v * S[r, p]
         assign_vars[r, p] = v
 
     m.setObjective(obj, GRB.MAXIMIZE)
 
-    for p in paper_partition:
-        m.addConstr(gp.quicksum(assign_vars[r, p] for r in reviewer_partition) == papload)
-    for r in reviewer_partition:
-        m.addConstr(gp.quicksum(assign_vars[r, p] for p in paper_partition) <= revload)
+    for p in P:
+        m.addConstr(gp.quicksum(assign_vars[r, p] for r in R) == papload)
+    for r in R:
+        m.addConstr(gp.quicksum(assign_vars[r, p] for p in P) <= revload)
 
     m.optimize()
 

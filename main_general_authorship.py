@@ -65,7 +65,7 @@ def heuristic_partition(S, COI, A_opt):
 
     S_comp = np.zeros((ncomp, ncomp))
     for r, p in itertools.product(range(nrev), range(npap)):
-        if A_opt[r, p]:
+        if A_opt[r, p] and r in rev_comps:
             rc = rev_comps[r]
             pc = pap_comps[p]
             S_comp[rc, pc] += S[r, p]
@@ -82,6 +82,16 @@ def heuristic_partition(S, COI, A_opt):
 
     return reviewer_partition, paper_partition
 
+def remove_high_authorships(S, COI, max_degree):
+    reviewer_degrees = np.sum(COI, axis=1)
+    mask = reviewer_degrees <= max_degree
+    n_removed = np.sum(~mask)
+    S_ = S[mask, :]
+    COI_ = COI[mask, :]
+    print(f'Removed {n_removed} reviewers with degree >{max_degree}', S_.shape)
+    return S_, COI_, mask
+
+
 if __name__ == '__main__':
     dataset = 'iclr2018'
     scores = np.load("data/" + dataset + ".npz", allow_pickle = True)
@@ -89,44 +99,56 @@ if __name__ == '__main__':
     COI = scores["mask_matrix"]
     revload = 6
     papload = 3
-    
-    
+
     A_opt = full_assign(S, COI, revload, papload)
     s_opt = np.sum(A_opt * S)
     with open(f'saved/{dataset}_opt_gen_rl{revload}pl{papload}.pkl', 'wb') as f:
         pickle.dump(s_opt, f)
     
-    methods = ['heuristic', 'random']
+    methods = ['heuristic_maxdegree3', 'heuristic', 'random']
     results = { m : [] for m in methods}
     ts = time.strftime('%m%d%H%M')
     failed = 0
     for method in methods:
-        T = 1
         if method == 'random':
             T = 100
+        else:
+            T = 1
+
         for i in range(T):
             print(method, i)
             if method == 'heuristic':
                 Rs, Ps = heuristic_partition(S, COI, A_opt)
                 print('Size of partitions:', [len(R) for R in Rs], [len(P) for P in Ps])
+
+                A = full_assign_with_partition(S, COI, Rs, Ps, revload, papload)
+            elif method == 'heuristic_maxdegree3':
+                S_reduced, COI_reduced, mask = remove_high_authorships(S, COI, max_degree=3)
+                A_opt_reduced = full_assign(S_reduced, COI_reduced, revload, papload)
+                Rs, Ps = heuristic_partition(S_reduced, COI_reduced, A_opt_reduced)
+                print('Size of partitions:', [len(R) for R in Rs], [len(P) for P in Ps])
+
+                A_reduced = full_assign_with_partition(S_reduced, COI_reduced, Rs, Ps, revload, papload)
+                A = np.zeros_like(COI)
+                A[mask, :] = A_reduced
             elif method == 'random':
                 Rs, Ps = random_general_partition(S, COI)
+
+                try:
+                    A = full_assign_with_partition(S, COI, Rs, Ps, revload, papload)
+                except RuntimeError: # if partition is too imbalanced
+                    i -= 1
+                    failed += 1
+                    continue
             else:
                 assert False
     
-            try:
-                A = full_assign_with_partition(S, Rs, Ps, revload, papload)
-            except RuntimeError: # if partition is too imbalanced
-                i -= 1
-                failed += 1
-                print('Assignment failed')
-                continue
             assert np.all(A <= 1-COI)
             s = np.sum(A * S)
-     
             p_opt = s / s_opt
             print(i, p_opt)
             results[method].append((Rs, Ps, s))
+
         fname = f'saved/{dataset}_gen_rl{revload}pl{papload}_{ts}.pkl'
         with open(fname, 'wb') as f:
             pickle.dump(results, f)
